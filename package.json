@@ -4,7 +4,9 @@
   "main": "index.js",
   "dependencies": {
     "expo": "~57.0.26",
+    "expo-location": "~57.0.20",
     "expo-status-bar": "~57.0.1",
+    "expo-task-manager": "~57.0.21",
     "react": "19.2.3",
     "react-native": "0.86.3"
   },
