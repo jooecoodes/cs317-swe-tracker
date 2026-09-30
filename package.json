@@ -4,6 +4,7 @@
   "main": "index.js",
   "dependencies": {
     "expo": "~57.0.26",
+    "expo-application": "~57.0.3",
     "expo-location": "~57.0.20",
     "expo-status-bar": "~57.0.1",
     "expo-task-manager": "~57.0.21",
