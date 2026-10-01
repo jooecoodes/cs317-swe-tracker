@@ -5,13 +5,14 @@ import {
   View,
   TouchableOpacity,
   Platform,
+  TextInput,
 } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import * as Application from "expo-application";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const LOCATION_TASK_NAME = "background-location-task";
-const SERVER_URL = "https://ranchlike-eddie-slyly.ngrok-free.dev/debug"; // Keep the trailing slash
 const DEVICE_ID =
   Platform.OS === "android"
     ? typeof Application.getAndroidId === "function"
@@ -38,12 +39,24 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 
     // Fire the HTTP POST request to your FastAPI server
     try {
-      await fetch(SERVER_URL, {
+      // Pull the URL from the phone's storage
+      const savedUrl = await AsyncStorage.getItem("server_url");
+      if (!savedUrl) {
+        console.log("No server URL configured.");
+        return;
+      }
+
+      await fetch(savedUrl, {
         method: "POST",
         body: formData,
         headers: { "Content-Type": "multipart/form-data" },
       });
-      console.log("Ping sent:", loc.coords.latitude, loc.coords.longitude);
+      console.log(
+        "Ping sent:",
+        loc.coords.latitude,
+        loc.coords.longitude,
+        DEVICE_ID,
+      );
     } catch (err) {
       console.error("Server offline or unreachable");
     }
@@ -54,9 +67,14 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 export default function App() {
   const [isTracking, setIsTracking] = useState(false);
   const [statusText, setStatusText] = useState("Waiting for permissions...");
+  const [serverUrl, setServerUrl] = useState("");
 
   useEffect(() => {
     (async () => {
+      // Load the saved URL when the app opens
+      const saved = await AsyncStorage.getItem("server_url");
+      if (saved) setServerUrl(saved);
+
       // Ask for foreground and background permissions
       const fg = await Location.requestForegroundPermissionsAsync();
       const bg = await Location.requestBackgroundPermissionsAsync();
@@ -103,6 +121,23 @@ export default function App() {
         <Text style={styles.deviceId} selectable={true}>
           {DEVICE_ID}
         </Text>
+      </View>
+
+      {/* --- NEW: URL Input Field --- */}
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Server URL</Text>
+        <TextInput
+          style={styles.input}
+          value={serverUrl}
+          onChangeText={async (text) => {
+            setServerUrl(text);
+            await AsyncStorage.setItem("server_url", text);
+          }}
+          placeholder="https://...ngrok-free.app"
+          placeholderTextColor="#555"
+          autoCapitalize="none"
+          keyboardType="url"
+        />
       </View>
 
       {/* --- NEW: Red/Green Status Dot --- */}
@@ -174,4 +209,14 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 12, height: 12, borderRadius: 6, marginRight: 8 },
   statusText: { color: "#aaaaaa", fontSize: 16 },
+  inputContainer: { width: "80%", marginBottom: 30 },
+  input: {
+    backgroundColor: "#1e1e1e",
+    color: "#ffffff",
+    padding: 15,
+    borderRadius: 8,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
 });
