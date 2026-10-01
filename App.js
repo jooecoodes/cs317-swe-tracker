@@ -30,6 +30,12 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
     const { locations } = data;
     const loc = locations[0]; // Grab the newest coordinate
 
+    // NEW: Drop the point if the GPS signal is bouncing wildly
+    if (loc.coords.accuracy > 15) {
+      console.log("Ignored inaccurate GPS bounce:", loc.coords.accuracy);
+      return;
+    }
+
     // Package the data exactly how Traccar did (Form Data)
     const formData = new FormData();
     formData.append("id", String(DEVICE_ID));
@@ -101,9 +107,11 @@ export default function App() {
       }
 
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 5000,
-        distanceInterval: 0,
+        // Upgrade from High to BestForNavigation
+        accuracy: Location.Accuracy.BestForNavigation,
+        // Ping every 2 seconds, BUT only if they moved at least 2 meters
+        timeInterval: 2000,
+        distanceInterval: 2,
         showsBackgroundLocationIndicator: true,
       });
       setIsTracking(true);
