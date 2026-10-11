@@ -20,53 +20,59 @@ const DEVICE_ID =
       : Application.androidId
     : "unknown-device";
 
-// 1. The Background Task (Runs even if the app is closed)
+const QUEUE_KEY = "point_queue";
+let flushing = false;
+
+async function enqueue(points) {
+  const raw = await AsyncStorage.getItem(QUEUE_KEY);
+  const queue = raw ? JSON.parse(raw) : [];
+  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify([...queue, ...points]));
+}
+
+async function flushQueue() {
+  if (flushing) return;
+  flushing = true;
+  try {
+    const url = await AsyncStorage.getItem("server_url");
+    if (!url) return;
+    const queue = JSON.parse((await AsyncStorage.getItem(QUEUE_KEY)) || "[]");
+    if (!queue.length) return;
+
+    const batch = queue.slice(0, 100);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: String(DEVICE_ID), points: batch }),
+    });
+    if (!res.ok) return; // keep the points, retry next time
+
+    // re-read: new points may have been queued while sending
+    const latest = JSON.parse((await AsyncStorage.getItem(QUEUE_KEY)) || "[]");
+    await AsyncStorage.setItem(
+      QUEUE_KEY,
+      JSON.stringify(latest.slice(batch.length)),
+    );
+  } catch {
+    // offline: points stay queued
+  } finally {
+    flushing = false;
+  }
+}
+
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
-  if (error) {
-    console.error(error);
-    return;
-  }
-  if (data) {
-    const { locations } = data;
-    const loc = locations[0]; // Grab the newest coordinate
+  if (error || !data) return;
 
-    // NEW: Drop the point if the GPS signal is bouncing wildly
-    if (loc.coords.accuracy > 15) {
-      console.log("Ignored inaccurate GPS bounce:", loc.coords.accuracy);
-      return;
-    }
+  const points = data.locations
+    .filter((l) => l.coords.accuracy != null && l.coords.accuracy <= 25)
+    .map((l) => ({
+      lat: l.coords.latitude,
+      lon: l.coords.longitude,
+      acc: l.coords.accuracy,
+      ts: Math.floor(l.timestamp / 1000),
+    }));
 
-    // Package the data exactly how Traccar did (Form Data)
-    const formData = new FormData();
-    formData.append("id", String(DEVICE_ID));
-    formData.append("lat", String(loc.coords.latitude));
-    formData.append("lon", String(loc.coords.longitude));
-    formData.append("timestamp", String(Math.floor(loc.timestamp / 1000)));
-
-    // Fire the HTTP POST request to your FastAPI server
-    try {
-      // Pull the URL from the phone's storage
-      const savedUrl = await AsyncStorage.getItem("server_url");
-      if (!savedUrl) {
-        console.log("No server URL configured.");
-        return;
-      }
-
-      await fetch(savedUrl, {
-        method: "POST",
-        body: formData,
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      console.log(
-        "Ping sent:",
-        loc.coords.latitude,
-        loc.coords.longitude,
-        DEVICE_ID,
-      );
-    } catch (err) {
-      console.error("Server offline or unreachable");
-    }
-  }
+  if (points.length) await enqueue(points);
+  await flushQueue();
 });
 
 // 2. The User Interface
@@ -90,6 +96,14 @@ export default function App() {
         return;
       }
       setStatusText("Ready to track.");
+
+      const running = await Location.hasStartedLocationUpdatesAsync(
+        LOCATION_TASK_NAME,
+      ).catch(() => false);
+      if (running) {
+        setIsTracking(true);
+        setStatusText("Tracking live...");
+      }
     })();
   }, []);
 
@@ -107,12 +121,13 @@ export default function App() {
       }
 
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-        // Upgrade from High to BestForNavigation
         accuracy: Location.Accuracy.BestForNavigation,
-        // Ping every 2 seconds, BUT only if they moved at least 2 meters
-        timeInterval: 2000,
-        distanceInterval: 2,
-        showsBackgroundLocationIndicator: true,
+        timeInterval: 3000,
+        distanceInterval: 0, // backend filters jitter, and this keeps "online" status alive when you stand still
+        foregroundService: {
+          notificationTitle: "Tracking active",
+          notificationBody: "Your location is being shared.",
+        },
       });
       setIsTracking(true);
       setStatusText("Tracking live...");
