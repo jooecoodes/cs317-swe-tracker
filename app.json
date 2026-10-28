@@ -33,6 +33,16 @@
       "eas": {
         "projectId": "5bca11c1-6d51-4fb3-8ded-48ec6e67c5d0"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "Allow tracker-app to share your location in the background."
+        }
+      ]
+    ]
   }
 }
