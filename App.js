@@ -21,30 +21,47 @@ const DEVICE_ID =
     : "unknown-device";
 
 const QUEUE_KEY = "point_queue";
+const TOKEN_KEY = "device_token"; // NEW
+const MAX_QUEUE = 5000; // NEW: a wrong token must not grow the queue forever
 let flushing = false;
+
+// NEW: nginx only lets a device token POST to exactly "/app3/" (trailing slash)
+function normalizeUrl(url) {
+  const u = (url || "").trim();
+  if (!u) return "";
+  return u.endsWith("/") ? u : u + "/";
+}
 
 async function enqueue(points) {
   const raw = await AsyncStorage.getItem(QUEUE_KEY);
   const queue = raw ? JSON.parse(raw) : [];
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify([...queue, ...points]));
+  const next = [...queue, ...points].slice(-MAX_QUEUE); // NEW: keep newest
+  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(next));
 }
 
 async function flushQueue() {
   if (flushing) return;
   flushing = true;
   try {
-    const url = await AsyncStorage.getItem("server_url");
+    const url = normalizeUrl(await AsyncStorage.getItem("server_url")); // CHANGED
     if (!url) return;
+    const token = ((await AsyncStorage.getItem(TOKEN_KEY)) || "").trim(); // NEW
     const queue = JSON.parse((await AsyncStorage.getItem(QUEUE_KEY)) || "[]");
     if (!queue.length) return;
 
     const batch = queue.slice(0, 100);
+
+    // NEW: attach the bearer token when one is set
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ id: String(DEVICE_ID), points: batch }),
     });
-    if (!res.ok) return; // keep the points, retry next time
+    // 401 = missing/wrong/revoked token. Points stay queued and retry later.
+    if (!res.ok) return;
 
     // re-read: new points may have been queued while sending
     const latest = JSON.parse((await AsyncStorage.getItem(QUEUE_KEY)) || "[]");
@@ -80,12 +97,15 @@ export default function App() {
   const [isTracking, setIsTracking] = useState(false);
   const [statusText, setStatusText] = useState("Waiting for permissions...");
   const [serverUrl, setServerUrl] = useState("");
+  const [token, setToken] = useState(""); // NEW
 
   useEffect(() => {
     (async () => {
-      // Load the saved URL when the app opens
+      // Load the saved URL and token when the app opens
       const saved = await AsyncStorage.getItem("server_url");
       if (saved) setServerUrl(saved);
+      const savedToken = await AsyncStorage.getItem(TOKEN_KEY); // NEW
+      if (savedToken) setToken(savedToken);
 
       // Ask for foreground and background permissions
       const fg = await Location.requestForegroundPermissionsAsync();
@@ -138,7 +158,6 @@ export default function App() {
     <View style={styles.container}>
       <Text style={styles.title}>GPS Tracker</Text>
 
-      {/* --- NEW: Device ID Card --- */}
       <View style={styles.card}>
         <Text style={styles.label}>Device ID</Text>
         <Text style={styles.deviceId} selectable={true}>
@@ -146,7 +165,6 @@ export default function App() {
         </Text>
       </View>
 
-      {/* --- NEW: URL Input Field --- */}
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Server URL</Text>
         <TextInput
@@ -156,14 +174,32 @@ export default function App() {
             setServerUrl(text);
             await AsyncStorage.setItem("server_url", text);
           }}
-          placeholder="https://...ngrok-free.app"
+          placeholder="https://cs317.duckdns.org/app3/"
           placeholderTextColor="#555"
           autoCapitalize="none"
+          autoCorrect={false}
           keyboardType="url"
         />
       </View>
 
-      {/* --- NEW: Red/Green Status Dot --- */}
+      {/* NEW: Auth token field */}
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Auth Token</Text>
+        <TextInput
+          style={styles.input}
+          value={token}
+          onChangeText={async (text) => {
+            setToken(text);
+            await AsyncStorage.setItem(TOKEN_KEY, text);
+          }}
+          placeholder="Paste device token"
+          placeholderTextColor="#555"
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+        />
+      </View>
+
       <View style={styles.statusContainer}>
         <View
           style={[
@@ -209,14 +245,13 @@ const styles = StyleSheet.create({
   buttonStart: { backgroundColor: "#28a745" },
   buttonStop: { backgroundColor: "#dc3545" },
   buttonText: { color: "#ffffff", fontWeight: "bold", fontSize: 18 },
-  // Add these inside your existing styles object
   card: {
     backgroundColor: "#1e1e1e",
     padding: 20,
     borderRadius: 10,
     width: "80%",
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: 20,
   },
   label: { color: "#888888", fontSize: 14, marginBottom: 5 },
   deviceId: {
@@ -228,11 +263,11 @@ const styles = StyleSheet.create({
   statusContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 30,
   },
   statusDot: { width: 12, height: 12, borderRadius: 6, marginRight: 8 },
   statusText: { color: "#aaaaaa", fontSize: 16 },
-  inputContainer: { width: "80%", marginBottom: 30 },
+  inputContainer: { width: "80%", marginBottom: 20 }, // CHANGED: 30 -> 20 to fit the new field
   input: {
     backgroundColor: "#1e1e1e",
     color: "#ffffff",
