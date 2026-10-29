@@ -42,7 +42,8 @@
           "isAndroidForegroundServiceEnabled": true,
           "locationAlwaysAndWhenInUsePermission": "Allow tracker-app to share your location in the background."
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }
