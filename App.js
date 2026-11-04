@@ -1,13 +1,6 @@
 import React, { useState, useEffect } from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Platform,
-  TextInput,
-  ActivityIndicator,
-} from "react-native";
+import { Platform } from "react-native";
+import { TrackerLoading, TrackerLogin, TrackingScreen } from "./frontend/ui/TrackerScreens";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import * as Application from "expo-application";
@@ -264,189 +257,34 @@ export default function App() {
   };
 
   if (!ready) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator color="#fff" />
-      </View>
-    );
+    return <TrackerLoading />;
   }
 
-  // ----- login screen -----
   if (!loggedIn) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>GPS Tracker</Text>
-        <Text style={styles.subtitle}>Log in to start tracking</Text>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Server</Text>
-          <TextInput
-            style={styles.input}
-            value={serverUrl}
-            onChangeText={setServerUrl}
-            placeholder="https://cs317.duckdns.org"
-            placeholderTextColor="#555"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-          />
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Tracker username"
-            placeholderTextColor="#555"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Password"
-            placeholderTextColor="#555"
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
-            onSubmitEditing={login}
-          />
-        </View>
-
-        {!!loginError && <Text style={styles.error}>{loginError}</Text>}
-
-        <TouchableOpacity
-          style={[styles.button, styles.buttonStart, busy && styles.disabled]}
-          onPress={login}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>LOG IN</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      <TrackerLogin
+        serverUrl={serverUrl}
+        setServerUrl={setServerUrl}
+        username={username}
+        setUsername={setUsername}
+        password={password}
+        setPassword={setPassword}
+        loginError={loginError}
+        busy={busy}
+        login={login}
+      />
     );
   }
 
-  // ----- tracking screen -----
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>GPS Tracker</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>Signed in as</Text>
-        <Text style={styles.deviceId}>{username}</Text>
-        <Text style={[styles.label, { marginTop: 12 }]}>Device ID</Text>
-        <Text style={styles.deviceIdSmall} selectable={true}>
-          {DEVICE_ID}
-        </Text>
-      </View>
-
-      <View style={styles.statusContainer}>
-        <View
-          style={[
-            styles.statusDot,
-            { backgroundColor: isTracking ? "#28a745" : "#dc3545" },
-          ]}
-        />
-        <Text style={styles.statusText}>
-          {isTracking ? "Online & Tracking" : "Offline"}
-        </Text>
-      </View>
-      {!!statusText && <Text style={styles.hint}>{statusText}</Text>}
-
-      <TouchableOpacity
-        style={[
-          styles.button,
-          isTracking ? styles.buttonStop : styles.buttonStart,
-        ]}
-        onPress={toggleTracking}
-      >
-        <Text style={styles.buttonText}>
-          {isTracking ? "STOP TRACKING" : "START TRACKING"}
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.linkButton, busy && styles.disabled]}
-        onPress={logout}
-        disabled={busy}
-      >
-        <Text style={styles.linkText}>Log out</Text>
-      </TouchableOpacity>
-    </View>
+    <TrackingScreen
+      username={username}
+      deviceId={DEVICE_ID}
+      isTracking={isTracking}
+      statusText={statusText}
+      busy={busy}
+      toggleTracking={toggleTracking}
+      logout={logout}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#121212",
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 10,
-  },
-  subtitle: { fontSize: 15, color: "#aaaaaa", marginBottom: 24 },
-  button: {
-    paddingVertical: 15,
-    paddingHorizontal: 40,
-    borderRadius: 8,
-    minWidth: 200,
-    alignItems: "center",
-  },
-  buttonStart: { backgroundColor: "#28a745" },
-  buttonStop: { backgroundColor: "#dc3545" },
-  buttonText: { color: "#ffffff", fontWeight: "bold", fontSize: 18 },
-  disabled: { opacity: 0.5 },
-  linkButton: { marginTop: 24, padding: 10 },
-  linkText: { color: "#888888", fontSize: 16, textDecorationLine: "underline" },
-  card: {
-    backgroundColor: "#1e1e1e",
-    padding: 20,
-    borderRadius: 10,
-    width: "80%",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  label: { color: "#888888", fontSize: 14, marginBottom: 5 },
-  deviceId: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "bold",
-    letterSpacing: 1,
-  },
-  deviceIdSmall: { color: "#cccccc", fontSize: 14 },
-  statusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  statusDot: { width: 12, height: 12, borderRadius: 6, marginRight: 8 },
-  statusText: { color: "#aaaaaa", fontSize: 16 },
-  hint: { color: "#777777", fontSize: 13, marginBottom: 24 },
-  error: { color: "#ff6b6b", fontSize: 14, marginBottom: 14, width: "80%" },
-  inputContainer: { width: "80%", marginBottom: 16 },
-  input: {
-    backgroundColor: "#1e1e1e",
-    color: "#ffffff",
-    padding: 15,
-    borderRadius: 8,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-});
