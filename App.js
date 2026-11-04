@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Platform } from "react-native";
-import { TrackerLoading, TrackerLogin, TrackingScreen } from "./frontend/ui/TrackerScreens";
+import {
+  TrackerLoading,
+  TrackerLogin,
+  TrackingScreen,
+} from "./frontend/ui/TrackerScreens";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import * as Application from "expo-application";
@@ -57,15 +61,26 @@ async function flushQueue() {
     if (!queue.length) return;
 
     const batch = queue.slice(0, 100);
-    // nginx only lets a tracker token POST to exactly "/app3/" (trailing slash)
-    const res = await fetch(`${base}/app3/`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ id: String(DEVICE_ID), points: batch }),
-    });
+
+    // abort the request if it hangs (weak mobile data)
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+
+    let res;
+    try {
+      // nginx only lets a tracker token POST to exactly "/app3/" (trailing slash)
+      res = await fetch(`${base}/app3/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id: String(DEVICE_ID), points: batch }),
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (res.status === 401 || res.status === 403) {
       // Token expired, revoked, or account disabled. Keep the queued points
@@ -82,7 +97,7 @@ async function flushQueue() {
       JSON.stringify(latest.slice(batch.length)),
     );
   } catch {
-    // offline: points stay queued
+    // offline or timed out: points stay queued
   } finally {
     flushing = false;
   }
