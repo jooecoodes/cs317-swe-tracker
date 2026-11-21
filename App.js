@@ -1,5 +1,6 @@
 import {filterGpsFixes} from './frontend/ui/gps-quality';
 import {startPhotoSync} from './frontend/ui/photo-queue';
+import {ensureNotificationPermission, startPhotoNotifications} from './frontend/ui/photo-notifications';
 import PhotoUpload from './frontend/ui/PhotoUpload';
 import React, { useState, useEffect } from "react";
 import { Platform } from "react-native";
@@ -108,6 +109,8 @@ async function flushQueue() {
   }
 }
 
+startPhotoNotifications();
+
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error || !data) return;
 
@@ -165,6 +168,7 @@ export default function App() {
       if (fg.status !== "granted" || bg.status !== "granted") {
         setStatusText("Permission denied. Cannot track.");
       }
+      await ensureNotificationPermission();
 
       const running = await Location.hasStartedLocationUpdatesAsync(
         LOCATION_TASK_NAME,
@@ -186,6 +190,28 @@ export default function App() {
     }, 5000);
     return () => clearInterval(id);
   }, [loggedIn]);
+
+  // Stop tracking cleanly if the employee turns off phone GPS in device settings.
+  useEffect(() => {
+    if (!isTracking) return;
+    let active = true;
+    const checkGps = async () => {
+      const enabled = await Location.hasServicesEnabledAsync().catch(() => true);
+      if (!active || enabled) return;
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => {});
+      if (!active) return;
+      setIsTracking(false);
+      setStatusText("Phone GPS is off. Tracking stopped.");
+    };
+    void checkGps();
+    const id = setInterval(() => {
+      void checkGps();
+    }, 5000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [isTracking]);
 
   const login = async () => {
     const base = normalizeBase(serverUrl);
@@ -266,6 +292,11 @@ export default function App() {
       setIsTracking(false);
       setStatusText("Tracking stopped.");
     } else {
+      const gpsEnabled = await Location.hasServicesEnabledAsync().catch(() => true);
+      if (!gpsEnabled) {
+        setStatusText("Turn on phone GPS to start tracking.");
+        return;
+      }
       const isRunning =
         await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
       if (isRunning) {
@@ -273,6 +304,7 @@ export default function App() {
           () => {},
         );
       }
+      await ensureNotificationPermission();
       await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
         accuracy: Location.Accuracy.BestForNavigation,
         timeInterval: 3000,
@@ -280,6 +312,8 @@ export default function App() {
         foregroundService: {
           notificationTitle: "Tracking active",
           notificationBody: "Your location is being shared.",
+          notificationColor: "#285587",
+          killServiceOnDestroy: false,
         },
       });
       setIsTracking(true);

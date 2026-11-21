@@ -1,21 +1,22 @@
-﻿{
-    "compilerOptions":  {
-                            "allowJs":  true,
-                            "checkJs":  true,
-                            "noEmit":  true,
-                            "jsx":  "react-native",
-                            "target":  "ES2022",
-                            "module":  "preserve",
-                            "moduleResolution":  "bundler",
-                            "skipLibCheck":  true,
-                            "esModuleInterop":  true,
-                            "strict":  false,
-                            "lib":  [
-                                        "ES2022"
-                                    ]
-                        },
-    "include":  [
-                    "frontend/ui/**/*.js",
-                    "types/**/*.d.ts"
-                ]
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "jsx": "react-native",
+    "target": "ES2022",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "strict": false,
+    "lib": [
+      "ES2022"
+    ]
+  },
+  "include": [
+    "frontend/ui/**/*.js",
+    "types/**/*.d.ts"
+  ],
+  "extends": "expo/tsconfig.base"
 }

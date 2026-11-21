@@ -22,7 +22,8 @@
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "package": "com.jooecoodes.trackerapp"
     },
@@ -53,7 +54,17 @@
         }
       ],
       "expo-background-task",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/northpoint-logo.png",
+          "largeIcon": "./assets/northpoint-logo.png",
+          "color": "#285587",
+          "defaultChannel": "photo-status-silent",
+          "enableRemoteNotifications": false
+        }
+      ]
     ]
   }
 }

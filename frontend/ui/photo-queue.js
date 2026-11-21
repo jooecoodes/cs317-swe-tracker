@@ -52,9 +52,9 @@ async function session() {
   return {base: normalizePhotoBase(await AsyncStorage.getItem('server_url')),
     token: await SecureStore.getItemAsync('device_token')};
 }
-async function request(url, options) {
+async function request(url, options, timeoutMs = 10000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {...options, signal: controller.signal});
     let body; try { body = await response.json(); } catch { /* HTML error from gateway, for example. */ }
@@ -198,7 +198,11 @@ export async function savePhoto(draft, base, identity) {
       const totals = await tx.getFirstAsync("SELECT COUNT(*) AS count, COALESCE(SUM(bytes),0) AS bytes FROM photo_outbox WHERE state!='sent'");
       if (totals.count >= 100 || totals.bytes + target.size > 200 * 1024 * 1024)
         throw Error('Your photo outbox is full. Connect to send your saved photos before adding more.');
-      const metadata = {...draft.metadata, expected_tracker_id: identity.tracker_id,
+      const exifTakenAt = typeof draft.metadata.exif_taken_at === 'string' && !Number.isNaN(Date.parse(draft.metadata.exif_taken_at))
+        ? draft.metadata.exif_taken_at.trim() : null;
+      const metadata = {...draft.metadata,
+        ...('exif_taken_at' in draft.metadata ? {exif_taken_at: exifTakenAt} : {}),
+        expected_tracker_id: identity.tracker_id,
         expected_employee_id: identity.employee_id, expected_employee_code: identity.employee_code};
       await tx.runAsync(`INSERT INTO photo_outbox(id,base,tracker_id,employee_id,employee_code,filename,metadata,bytes,created)
         VALUES(?,?,?,?,?,?,?,?,?)`, draft.metadata.upload_id, base, identity.tracker_id, identity.employee_id,
@@ -260,7 +264,7 @@ async function flush() {
       const file = photoFile(row);
       if (!file.exists) throw Object.assign(Error('The saved photo file is missing. Contact HR; this item cannot be sent.'), {status: 422});
       const form = new FormData(); form.append('file', file); form.append('metadata', row.metadata); form.append('title', JSON.parse(row.metadata).title || 'Untitled Photo');
-      return request(`${row.base}/app2/mobile-upload`, {method: 'POST', headers: {Authorization: `Bearer ${current.token}`}, body: form});
+      return request(`${row.base}/app2/mobile-upload`, {method: 'POST', headers: {Authorization: `Bearer ${current.token}`}, body: form}, 30000);
     },
     confirm: async (_, saved) => {
       const updated = await connection.runAsync("UPDATE photo_outbox SET state='sent',server_id=?,sent_at=?,lease_until=0,lease_key=NULL,message='Photo sent successfully. HR can now see it.' WHERE id=? AND lease_key=?", saved.id, Date.now(), row.id, lease);
